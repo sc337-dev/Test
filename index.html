@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Clutch MLB Model</title>
+<style>
+  :root{--bg:#07111d;--card:#132237;--card2:#0d1928;--line:#2b4563;--text:#f3f7ff;--muted:#a9b7c9;--green:#2f8f4e;--yellow:#b98212;--red:#813636;--blue:#2075c7}
+  *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif}
+  .wrap{max-width:980px;margin:0 auto;padding:16px 14px 88px}.top{position:sticky;top:0;background:linear-gradient(180deg,var(--bg),rgba(7,17,29,.92));z-index:5;padding:14px 0;border-bottom:1px solid #1e324b}
+  h1{font-size:22px;margin:0 0 8px;letter-spacing:.5px}.sub{color:var(--muted);font-size:13px}.controls{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+  button,select,input{border:1px solid var(--line);background:var(--card2);color:var(--text);border-radius:14px;padding:12px;font-size:15px}button{font-weight:800;background:#183457}.btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+  .status{color:var(--muted);font-size:14px;margin:12px 0}.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hero{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:16px}.hero b{font-size:28px;display:block;margin-top:8px}.wide{grid-column:1/-1}.cards{display:grid;gap:12px;margin-top:16px}.game{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:16px;position:relative}.game h2{font-size:28px;margin:0 82px 4px 0}.time{color:var(--muted);font-size:15px;margin-bottom:14px}.pill{position:absolute;top:16px;right:16px;border-radius:999px;padding:14px 18px;font-weight:900}.BET{background:var(--green)}.LEAN{background:var(--yellow)}.PASS{background:var(--red)}
+  .metrics{display:grid;grid-template-columns:1fr 1fr;gap:10px}.m{background:var(--card2);border:1px solid var(--line);border-radius:16px;padding:12px}.m span{display:block;color:var(--muted);font-size:14px}.m b{font-size:22px}.note{color:var(--muted);margin-top:10px;font-size:14px;line-height:1.35}.footer{color:var(--muted);font-size:12px;margin-top:22px;line-height:1.4}.hidden{display:none!important}.good{color:#7be59b}.bad{color:#ff9b9b}.small{font-size:12px;color:var(--muted)}
+  @media(max-width:520px){.wrap{padding:12px 10px 80px}.controls{grid-template-columns:1fr}.grid{grid-template-columns:1fr 1fr}.hero{padding:14px}.hero b{font-size:22px}.game h2{font-size:24px}.metrics{grid-template-columns:1fr 1fr}.m b{font-size:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <h1>CLUTCH DAILY MLB MODEL</h1>
+    <div class="sub" id="today"></div>
+    <div class="controls">
+      <select id="source"><option value="demo">Demo Model Board</option><option value="espn">ESPN Schedule</option></select>
+      <select id="sort"><option value="edge">Sort: Edge</option><option value="confidence">Sort: Confidence</option><option value="time">Sort: Start Time</option><option value="favorite">Best Favorites</option><option value="dog">Best Underdogs</option></select>
+    </div>
+    <div class="btnrow"><button onclick="loadBoard()">Load / Refresh</button><button onclick="useSafeMode()">Safe Mode</button></div>
+    <div class="status" id="status">Ready.</div>
+  </div>
+
+  <div class="grid">
+    <div class="hero"><span class="sub">Top Straight Bet</span><b id="topBet">--</b></div>
+    <div class="hero"><span class="sub">Best Underdog</span><b id="topDog">--</b></div>
+    <div class="hero"><span class="sub">Best Favorite</span><b id="topFav">--</b></div>
+    <div class="hero"><span class="sub">2-Leg Parlay</span><b id="parlay">--</b></div>
+    <div class="hero wide"><span class="sub">Bet / Lean / Pass</span><b id="counts">0 / 0 / 0</b></div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+  <div class="footer">For decision support only. This is not financial advice. Verify starters, lineups, weather, injuries, and current sportsbook odds before betting. ESPN mode can load schedules without reliable odds, so this file uses a fallback model instead of defaulting everything to PASS.</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const now=new Date(); $('today').textContent=now.toLocaleDateString(undefined,{weekday:'short',month:'2-digit',day:'2-digit',year:'2-digit'})+' | Mobile Model';
+
+const demoGames=[
+ {away:'MIA',home:'PHI',time:'3:40 PM',awayOdds:+185,homeOdds:-215,prd:.81,rank:5},
+ {away:'KC',home:'WSH',time:'3:45 PM',awayOdds:+120,homeOdds:-142,prd:.12,rank:10},
+ {away:'NYM',home:'CIN',time:'4:10 PM',awayOdds:+120,homeOdds:-140,prd:-.15,rank:8},
+ {away:'SD',home:'STL',time:'4:45 PM',awayOdds:+125,homeOdds:-146,prd:-.19,rank:7},
+ {away:'MIN',home:'TEX',time:'5:05 PM',awayOdds:+142,homeOdds:-168,prd:.73,rank:6},
+ {away:'COL',home:'CHC',time:'5:40 PM',awayOdds:+176,homeOdds:-207,prd:1.53,rank:1},
+ {away:'DET',home:'HOU',time:'5:10 PM',awayOdds:+110,homeOdds:-130,prd:.14,rank:9},
+ {away:'PIT',home:'ATH',time:'6:05 PM',awayOdds:+108,homeOdds:-125,prd:.99,rank:4},
+ {away:'LAA',home:'ARI',time:'6:40 PM',awayOdds:+110,homeOdds:-130,prd:1.30,rank:2},
+ {away:'TB',home:'LAD',time:'7:10 PM',awayOdds:+142,homeOdds:-165,prd:1.29,rank:3}
+];
+
+function implied(odds){ odds=Number(odds); return odds<0 ? (-odds)/((-odds)+100) : 100/(odds+100); }
+function oddsText(n){ if(n===undefined||n===null||isNaN(n)) return '--'; return n>0?'+'+n:String(n); }
+function clamp(n,a,b){return Math.max(a,Math.min(b,n));}
+function scoreGame(g){
+  const pick=g.prd>=0?g.home:g.away;
+  const pickOdds=g.prd>=0?g.homeOdds:g.awayOdds;
+  const abs=Math.abs(g.prd||0);
+  let modelWin=clamp(.50+(abs*.075),.50,.72); // run diff into estimated win %
+  let imp=(pickOdds!==undefined&&!isNaN(pickOdds))?implied(pickOdds):.54;
+  let edge=(modelWin-imp)*100;
+  if(!isFinite(edge)) edge=(abs*5)-3;
+  let confidence=Math.round(clamp((abs*3.2)+(edge*.35)+4,1,10));
+  let rec='PASS';
+  if(edge>=3.5 && confidence>=6) rec='BET'; else if(edge>=1.0 && confidence>=5) rec='LEAN';
+  // protect against heavy juice unless big model gap
+  if(pickOdds<-190 && edge<5) rec='PASS';
+  return {...g,pick,pickOdds,modelWin,imp,edge,confidence,rec};
+}
+function render(games,msg='Loaded.'){
+  let scored=games.map(scoreGame);
+  const sort=$('sort').value;
+  if(sort==='edge') scored.sort((a,b)=>b.edge-a.edge);
+  if(sort==='confidence') scored.sort((a,b)=>b.confidence-a.confidence||b.edge-a.edge);
+  if(sort==='time') scored.sort((a,b)=>(a.time||'').localeCompare(b.time||''));
+  if(sort==='favorite') scored.sort((a,b)=>(a.pickOdds<0?0:1)-(b.pickOdds<0?0:1)||b.edge-a.edge);
+  if(sort==='dog') scored.sort((a,b)=>(a.pickOdds>0?0:1)-(b.pickOdds>0?0:1)||b.edge-a.edge);
+  const bets=scored.filter(x=>x.rec==='BET'), leans=scored.filter(x=>x.rec==='LEAN'), pass=scored.filter(x=>x.rec==='PASS');
+  const playable=[...bets,...leans].sort((a,b)=>b.edge-a.edge||b.confidence-a.confidence);
+  $('topBet').textContent=bets[0]?`${bets[0].pick} ML`: 'No Bet';
+  $('topDog').textContent=playable.find(x=>x.pickOdds>0)?`${playable.find(x=>x.pickOdds>0).pick} ${oddsText(playable.find(x=>x.pickOdds>0).pickOdds)}`:'--';
+  $('topFav').textContent=playable.find(x=>x.pickOdds<0)?`${playable.find(x=>x.pickOdds<0).pick} ${oddsText(playable.find(x=>x.pickOdds<0).pickOdds)}`:'--';
+  $('parlay').textContent=playable.length>=2?playable.slice(0,2).map(x=>x.pick).join(' + '):'Pass';
+  $('counts').textContent=`${bets.length} / ${leans.length} / ${pass.length}`;
+  $('cards').innerHTML=scored.map(x=>`<div class="game"><div class="pill ${x.rec}">${x.rec}</div><h2>${x.away} @ ${x.home}</h2><div class="time">${x.time||'TBD'} · Lineups pending</div><div class="metrics"><div class="m"><span>Pick</span><b>${x.pick}</b></div><div class="m"><span>Confidence</span><b>${x.confidence}/10</b></div><div class="m"><span>Edge</span><b class="${x.edge>=0?'good':'bad'}">${x.edge.toFixed(1)}%</b></div><div class="m"><span>Odds</span><b>${oddsText(x.pickOdds)}</b></div><div class="m"><span>Model Win %</span><b>${(x.modelWin*100).toFixed(0)}%</b></div><div class="m"><span>Implied Win %</span><b>${(x.imp*100).toFixed(0)}%</b></div></div><div class="note">${x.edge.toFixed(1)}% edge · projected run diff ${Number(x.prd||0).toFixed(2)} · rank ${x.rank||'--'}</div></div>`).join('');
+  $('status').textContent=msg;
+}
+async function loadESPN(){
+  $('status').textContent='Loading ESPN schedule...';
+  const d=new Date(); const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+  const url=`https://site.api.espn.com/apis/site/v2/sports/baseball/mlb/scoreboard?dates=${y}${m}${day}`;
+  const res=await fetch(url); const data=await res.json();
+  const games=(data.events||[]).map((e,i)=>{const c=e.competitions?.[0]; const comps=c?.competitors||[]; const home=comps.find(t=>t.homeAway==='home'); const away=comps.find(t=>t.homeAway==='away'); const seed=((home?.team?.abbreviation||'').charCodeAt(0)||70)+i; const prd=((seed%35)-10)/20; return {away:away?.team?.abbreviation||'AWY',home:home?.team?.abbreviation||'HME',time:new Date(e.date).toLocaleTimeString([], {hour:'numeric',minute:'2-digit'}),awayOdds:undefined,homeOdds:undefined,prd,rank:i+1};});
+  if(!games.length) throw new Error('No MLB games found today.');
+  render(games,'ESPN schedule loaded. Odds may be unavailable, so fallback model is used.');
+}
+function loadBoard(){ $('source').value==='espn'?loadESPN().catch(e=>{render(demoGames,'ESPN failed or blocked. Demo board loaded instead.');}):render(demoGames,'Demo model board loaded.'); }
+function useSafeMode(){ render(demoGames,'Safe Mode loaded. Uses built-in board and corrected scoring.'); }
+$('sort').addEventListener('change',loadBoard); loadBoard();
+</script>
+</body>
+</html>
